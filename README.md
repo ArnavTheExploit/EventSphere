@@ -2,7 +2,7 @@
 
 **EventSphere** is a modern, comprehensive event management platform designed to streamline the experience for both event organizers and participants. It provides a seamless interface for creating, managing, and browsing events, backed by a robust and secure infrastructure.
 
-🚀 **Live Demo:** [eventsphere.vercel.app](https://eventsphere-ochre.vercel.app)
+🚀 **Live Demo:** [eventsphere-ochre.vercel.app](https://eventsphere-ochre.vercel.app)
 
 ---
 
