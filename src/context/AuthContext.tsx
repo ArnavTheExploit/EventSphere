@@ -16,8 +16,9 @@ interface AuthContextValue {
   role: UserRole | null;
   signUpWithEmail: (email: string, password: string, role: UserRole) => Promise<void>;
   signInWithEmail: (email: string, password: string) => Promise<void>;
-  signInWithGoogle: (role?: UserRole) => Promise<void>;
+  signInWithGoogle: (role?: UserRole) => Promise<UserRole | null>;
   logout: () => Promise<void>;
+  assignRole: (role: UserRole) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -79,14 +80,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await signInWithEmailAndPassword(auth, email, password);
   };
 
-  const signInWithGoogle = async (selectedRole?: UserRole) => {
+  const signInWithGoogle = async (selectedRole?: UserRole): Promise<UserRole | null> => {
     const cred = await signInWithPopup(auth, googleProvider);
     const store = loadRoleStore();
     const existingRole = store[cred.user.uid];
-    if (!existingRole && selectedRole) {
-      persistRole(cred.user.uid, selectedRole);
-    } else if (existingRole) {
+
+    if (existingRole) {
       setRole(existingRole);
+      return existingRole;
+    }
+
+    if (selectedRole) {
+      persistRole(cred.user.uid, selectedRole);
+      return selectedRole;
+    }
+
+    return null;
+  };
+
+  const assignRole = async (newRole: UserRole) => {
+    if (user) {
+      persistRole(user.uid, newRole);
     }
   };
 
@@ -101,7 +115,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     signUpWithEmail,
     signInWithEmail,
     signInWithGoogle,
-    logout
+    logout,
+    assignRole
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
@@ -114,5 +129,6 @@ export const useAuth = (): AuthContextValue => {
   }
   return ctx;
 };
+
 
 

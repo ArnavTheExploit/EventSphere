@@ -43,9 +43,9 @@ function HomePage() {
         <div className="mx-auto max-w-6xl px-4">
           <div className="mb-8 flex items-center justify-between">
             <h2 className="text-2xl font-bold text-slate-900">Upcoming Events</h2>
-            <a href="#" className="text-sm font-medium text-brand-blue hover:underline">View all &rarr;</a>
+            {/* View all link removed */}
           </div>
-          <ParticipantDashboard />
+          <ParticipantDashboard limit={6} />
         </div>
       </section>
 
@@ -76,7 +76,7 @@ export default function App() {
             <Route
               path="/register/:eventId"
               element={
-                <ProtectedRoute requiredRole="participant">
+                <ProtectedRoute>
                   <RegistrationPage />
                 </ProtectedRoute>
               }
@@ -99,5 +99,6 @@ export default function App() {
     </AuthProvider>
   );
 }
+
 
 

@@ -122,26 +122,7 @@ export const mockEvents: Event[] = [
     imageUrl: "/events/workshop_poster.png",
     createdByUid: "organizer-demo-1"
   },
-  {
-    id: "ev7",
-    title: "Inter-College Debate",
-    category: "Cultural Events",
-    date: "2026-03-05",
-    time: "10:00 AM – 01:00 PM",
-    location: "Main Auditorium",
-    organizerName: "Debating Society",
-    organizerContact: "debate@example.com",
-    description: "A battle of wits and words on trending global topics.",
-    aboutEvent: "Debaters from across the region will compete in this high-stakes tournament. The topic will be released 24 hours prior.",
-    posterUrl: "",
-    brochureUrl: "#",
-    rules: "Teams of 2. Standard Parliamentary Debate format.",
-    prizes: "Best Team: $500",
-    registrationFee: "Free",
-    teamSize: "2 members",
-    imageUrl: "",
-    createdByUid: "organizer-demo-99" // Different organizer for "All Events" testing
-  }
+
 ];
 
 export const mockParticipants = [
@@ -173,5 +154,6 @@ export const mockParticipants = [
     yearOfStudy: "2nd Year"
   }
 ];
+
 
 

@@ -33,9 +33,16 @@ isAnalyticsSupported()
     analytics = null;
   });
 
+
 // Export Auth instance and provider for use across the app
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 export const db = getFirestore(app);
+
+// Initialize Firebase Storage
+import { getStorage } from "firebase/storage";
+export const storage = getStorage(app);
+
+
 
 

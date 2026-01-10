@@ -12,14 +12,17 @@ const categories: EventCategory[] = [
   "Workshops"
 ];
 
-export function ParticipantDashboard() {
+export function ParticipantDashboard({ limit }: { limit?: number }) {
   const [activeCategory, setActiveCategory] = useState<EventCategory | "All">("All");
   const navigate = useNavigate();
 
   const filteredEvents = useMemo(() => {
-    if (activeCategory === "All") return mockEvents;
-    return mockEvents.filter((e) => e.category === activeCategory);
-  }, [activeCategory]);
+    let events = mockEvents;
+    if (activeCategory !== "All") {
+      events = mockEvents.filter((e) => e.category === activeCategory);
+    }
+    return limit ? events.slice(0, limit) : events;
+  }, [activeCategory, limit]);
 
   const handleRegisterClick = (eventId: string) => {
     navigate(`/register/${eventId}`);
@@ -42,8 +45,8 @@ export function ParticipantDashboard() {
             type="button"
             onClick={() => setActiveCategory("All")}
             className={`rounded-full border px-4 py-2 text-sm font-medium transition ${activeCategory === "All"
-                ? "border-brand-blue bg-brand-blue text-white"
-                : "border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50"
+              ? "border-brand-blue bg-brand-blue text-white"
+              : "border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50"
               }`}
           >
             All
@@ -54,8 +57,8 @@ export function ParticipantDashboard() {
               type="button"
               onClick={() => setActiveCategory(cat)}
               className={`rounded-full border px-4 py-2 text-sm font-medium transition ${activeCategory === cat
-                  ? "border-brand-blue bg-brand-blue text-white"
-                  : "border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50"
+                ? "border-brand-blue bg-brand-blue text-white"
+                : "border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50"
                 }`}
             >
               {cat}
@@ -117,3 +120,4 @@ export function ParticipantDashboard() {
     </div>
   );
 }
+

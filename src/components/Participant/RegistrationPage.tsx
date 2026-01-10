@@ -8,7 +8,7 @@ import { useAuth } from "../../context/AuthContext";
 export function RegistrationPage() {
     const { eventId } = useParams();
     const navigate = useNavigate();
-    const { user } = useAuth();
+    const { user, role } = useAuth(); // Get role
 
     const event = mockEvents.find((e) => e.id === eventId);
 
@@ -135,100 +135,119 @@ export function RegistrationPage() {
 
                 {/* Registration Form Column */}
                 <div className="lg:pl-8">
-                    <div className="sticky top-24 rounded-2xl border border-slate-200 bg-white p-6 shadow-xl shadow-slate-200/50">
-                        <h2 className="text-xl font-bold text-slate-900">Register Now</h2>
-                        <p className="border-b border-slate-100 pb-4 text-sm text-slate-500">
-                            Secure your spot for this event.
-                        </p>
+                    {role === "organizer" ? (
+                        <div className="sticky top-24 rounded-2xl border border-slate-200 bg-slate-50 p-8 text-center shadow-sm">
+                            <span className="mb-4 inline-block text-4xl">👀</span>
+                            <h2 className="text-xl font-bold text-slate-900">Organizer View</h2>
+                            <p className="mt-2 text-slate-600">
+                                You are viewing the details for <strong>{event.title}</strong>.
+                            </p>
+                            <p className="mt-4 text-sm text-slate-500">
+                                As an organizer, you cannot register for events, but you can view all public details here.
+                            </p>
+                            <button
+                                onClick={() => navigate("/organizer")}
+                                className="mt-6 w-full rounded-full border border-slate-300 bg-white py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                            >
+                                Back to Dashboard
+                            </button>
+                        </div>
+                    ) : (
+                        <div className="sticky top-24 rounded-2xl border border-slate-200 bg-white p-6 shadow-xl shadow-slate-200/50">
+                            <h2 className="text-xl font-bold text-slate-900">Register Now</h2>
+                            <p className="border-b border-slate-100 pb-4 text-sm text-slate-500">
+                                Secure your spot for this event.
+                            </p>
 
-                        <form onSubmit={handleSubmit} className="mt-6 space-y-4">
-                            <div>
-                                <label className="mb-1 block text-sm font-medium text-slate-700">Full Name</label>
-                                <input
-                                    type="text"
-                                    required
-                                    value={formData.name}
-                                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue"
-                                    placeholder="John Doe"
-                                />
-                            </div>
-
-                            <div>
-                                <label className="mb-1 block text-sm font-medium text-slate-700">Email Address</label>
-                                <input
-                                    type="email"
-                                    required
-                                    value={formData.email}
-                                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue"
-                                    placeholder="john@example.com"
-                                />
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4">
+                            <form onSubmit={handleSubmit} className="mt-6 space-y-4">
                                 <div>
-                                    <label className="mb-1 block text-sm font-medium text-slate-700">Phone</label>
-                                    <input
-                                        type="tel"
-                                        required
-                                        value={formData.phone}
-                                        onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue"
-                                        placeholder="1234567890"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="mb-1 block text-sm font-medium text-slate-700">College / Company</label>
+                                    <label className="mb-1 block text-sm font-medium text-slate-700">Full Name</label>
                                     <input
                                         type="text"
                                         required
-                                        value={formData.college}
-                                        onChange={(e) => setFormData({ ...formData, college: e.target.value })}
+                                        value={formData.name}
+                                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                                         className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue"
-                                        placeholder="Institution"
+                                        placeholder="John Doe"
                                     />
                                 </div>
-                            </div>
 
-                            <div>
-                                <label className="mb-1 block text-sm font-medium text-slate-700">Year / Designation</label>
-                                <input
-                                    type="text"
-                                    required
-                                    value={formData.year}
-                                    onChange={(e) => setFormData({ ...formData, year: e.target.value })}
-                                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue"
-                                    placeholder="e.g. 3rd Year / Developer"
-                                />
-                            </div>
-
-                            {event.teamSize !== "Individual" && (
                                 <div>
-                                    <label className="mb-1 block text-sm font-medium text-slate-700">Team Members (Optional)</label>
-                                    <textarea
-                                        value={formData.teamMembers}
-                                        onChange={(e) => setFormData({ ...formData, teamMembers: e.target.value })}
+                                    <label className="mb-1 block text-sm font-medium text-slate-700">Email Address</label>
+                                    <input
+                                        type="email"
+                                        required
+                                        value={formData.email}
+                                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                                         className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue"
-                                        placeholder="List names of other team members..."
-                                        rows={3}
+                                        placeholder="john@example.com"
                                     />
                                 </div>
-                            )}
 
-                            {error && (
-                                <p className="text-sm text-red-600">{error}</p>
-                            )}
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="mb-1 block text-sm font-medium text-slate-700">Phone</label>
+                                        <input
+                                            type="tel"
+                                            required
+                                            value={formData.phone}
+                                            onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                                            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue"
+                                            placeholder="1234567890"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="mb-1 block text-sm font-medium text-slate-700">College / Company</label>
+                                        <input
+                                            type="text"
+                                            required
+                                            value={formData.college}
+                                            onChange={(e) => setFormData({ ...formData, college: e.target.value })}
+                                            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue"
+                                            placeholder="Institution"
+                                        />
+                                    </div>
+                                </div>
 
-                            <button
-                                type="submit"
-                                disabled={isSubmitting}
-                                className="mt-2 w-full rounded-full bg-gradient-to-r from-brand-orange to-brand-pink py-3 text-sm font-bold text-white shadow-lg shadow-brand-pink/30 hover:shadow-brand-pink/50 disabled:opacity-70"
-                            >
-                                {isSubmitting ? "Processing..." : "Confirm Registration"}
-                            </button>
-                        </form>
-                    </div>
+                                <div>
+                                    <label className="mb-1 block text-sm font-medium text-slate-700">Year / Designation</label>
+                                    <input
+                                        type="text"
+                                        required
+                                        value={formData.year}
+                                        onChange={(e) => setFormData({ ...formData, year: e.target.value })}
+                                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue"
+                                        placeholder="e.g. 3rd Year / Developer"
+                                    />
+                                </div>
+
+                                {event.teamSize !== "Individual" && (
+                                    <div>
+                                        <label className="mb-1 block text-sm font-medium text-slate-700">Team Members (Optional)</label>
+                                        <textarea
+                                            value={formData.teamMembers}
+                                            onChange={(e) => setFormData({ ...formData, teamMembers: e.target.value })}
+                                            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue"
+                                            placeholder="List names of other team members..."
+                                            rows={3}
+                                        />
+                                    </div>
+                                )}
+
+                                {error && (
+                                    <p className="text-sm text-red-600">{error}</p>
+                                )}
+
+                                <button
+                                    type="submit"
+                                    disabled={isSubmitting}
+                                    className="mt-2 w-full rounded-full bg-gradient-to-r from-brand-orange to-brand-pink py-3 text-sm font-bold text-white shadow-lg shadow-brand-pink/30 hover:shadow-brand-pink/50 disabled:opacity-70"
+                                >
+                                    {isSubmitting ? "Processing..." : "Confirm Registration"}
+                                </button>
+                            </form>
+                        </div>
+                    )}
                 </div>
             </div>
         </div>

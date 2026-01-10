@@ -1,22 +1,30 @@
 import { useMemo, useState, useEffect } from "react";
-import { mockEvents } from "../../mockData";
+import { mockEvents, mockParticipants } from "../../mockData";
 import type { Event, EventCategory, Registration } from "../../types";
 import { useAuth } from "../../context/AuthContext";
-import { db } from "../../firebaseConfig";
+import { db, storage } from "../../firebaseConfig";
 import { collection, doc, setDoc, onSnapshot } from "firebase/firestore";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
 export function OrganizerDashboard() {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<"my-events" | "all-events">("my-events");
   const [events, setEvents] = useState<Event[]>(mockEvents);
-  const [registrations, setRegistrations] = useState<Registration[]>([]);
+
+  // Initialize with mock data for visual population, then merge with Firebase updates if any
+  const [registrations, setRegistrations] = useState<Registration[]>(mockParticipants as Registration[]);
 
   const [editingEvent, setEditingEvent] = useState<Event | null>(null);
-  const [uploading, setUploading] = useState(false);
+
+  // File states for upload
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [posterFile, setPosterFile] = useState<File | null>(null);
+  const [brochureFile, setBrochureFile] = useState<File | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
 
   const currentUid = user?.uid ?? "organizer-demo-1";
 
-  // Fetch registrations from Firebase
+  // Fetch registratios from Firebase
   useEffect(() => {
     if (!user) return;
 
@@ -26,11 +34,37 @@ export function OrganizerDashboard() {
       snapshot.forEach((doc) => {
         fetchedRegs.push({ id: doc.id, ...doc.data() } as Registration);
       });
-      setRegistrations(fetchedRegs);
+      // Combine mock and real for demo purposes
+      setRegistrations([...(mockParticipants as Registration[]), ...fetchedRegs]);
     });
 
     return () => unsubscribe();
   }, [user]);
+
+  // Fetch real events from Firebase to merge/replace mock events
+  useEffect(() => {
+    const unsubscribe = onSnapshot(collection(db, "events"), (snapshot) => {
+      const fetchedEvents: Event[] = [];
+      snapshot.forEach((doc) => {
+        fetchedEvents.push(doc.data() as Event);
+      });
+      // Merge unique events
+      setEvents((prev) => {
+        const unique = [...prev];
+        fetchedEvents.forEach(fe => {
+          if (!unique.some(e => e.id === fe.id)) {
+            unique.push(fe);
+          } else {
+            // Update existing if needed
+            const idx = unique.findIndex(e => e.id === fe.id);
+            unique[idx] = fe;
+          }
+        });
+        return unique;
+      });
+    });
+    return () => unsubscribe();
+  }, []);
 
   const myEvents = useMemo(
     () => events.filter((e) => e.createdByUid === currentUid),
@@ -73,25 +107,72 @@ export function OrganizerDashboard() {
 
   const openCreate = () => {
     setEditingEvent(blankEvent);
+    resetFiles();
   };
 
   const openEdit = (event: Event) => {
     setEditingEvent(event);
+    resetFiles();
   };
 
-  const handleSave = () => {
+  const resetFiles = () => {
+    setImageFile(null);
+    setPosterFile(null);
+    setBrochureFile(null);
+  };
+
+  const uploadFile = async (file: File, path: string): Promise<string> => {
+    const storageRef = ref(storage, path);
+    await uploadBytes(storageRef, file);
+    return await getDownloadURL(storageRef);
+  };
+
+  const handleSave = async () => {
     if (!editingEvent) return;
-    setEvents((prev) => {
-      const exists = prev.some((e) => e.id === editingEvent.id);
-      if (exists) {
-        return prev.map((e) => (e.id === editingEvent.id ? editingEvent : e));
+    setIsUploading(true);
+
+    try {
+      let updatedEvent = { ...editingEvent };
+      const eventId = updatedEvent.id;
+
+      // Upload files if selected
+      if (imageFile) {
+        const url = await uploadFile(imageFile, `events/${eventId}/image_${imageFile.name}`);
+        updatedEvent.imageUrl = url;
       }
-      return [...prev, editingEvent];
-    });
-    setEditingEvent(null);
+      if (posterFile) {
+        const url = await uploadFile(posterFile, `events/${eventId}/poster_${posterFile.name}`);
+        updatedEvent.posterUrl = url;
+      }
+      if (brochureFile) {
+        const url = await uploadFile(brochureFile, `events/${eventId}/brochure_${brochureFile.name}`);
+        updatedEvent.brochureUrl = url;
+      }
+
+      // Save to Firebase
+      await setDoc(doc(db, "events", eventId), updatedEvent);
+
+      // Update local state immediately for responsiveness
+      setEvents((prev) => {
+        const exists = prev.some((e) => e.id === eventId);
+        if (exists) {
+          return prev.map((e) => (e.id === eventId ? updatedEvent : e));
+        }
+        return [...prev, updatedEvent];
+      });
+
+      setEditingEvent(null);
+      resetFiles();
+    } catch (error) {
+      console.error("Error saving event:", error);
+      alert("Failed to save event. Check console for details.");
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   const handleDelete = (id: string) => {
+    // In real app, delete from Firestore too
     setEvents((prev) => prev.filter((e) => e.id !== id));
   };
 
@@ -129,40 +210,17 @@ export function OrganizerDashboard() {
     document.body.removeChild(link);
   };
 
-  const uploadToFirebase = async () => {
-    try {
-      setUploading(true);
-      const eventsCol = collection(db, "events");
-      for (const event of events) {
-        await setDoc(doc(eventsCol, event.id), event);
-      }
-      alert("Events uploaded to Firebase successfully!");
-    } catch (error) {
-      console.error("Error uploading events:", error);
-      alert("Failed to upload events. See console for details.");
-    } finally {
-      setUploading(false);
-    }
-  };
-
   return (
     <div className="mx-auto flex max-w-7xl flex-col gap-8 px-4 py-8">
       <section className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-slate-800 dark:text-slate-50">Organizer Dashboard</h1>
-          <p className="mt-2 text-slate-600 dark:text-slate-400">
+          <h1 className="text-3xl font-bold text-black dark:text-slate-50">Organizer Dashboard</h1>
+          <p className="mt-2 text-black dark:text-slate-400">
             Manage your events, view registrations, and explore events from other organizers.
           </p>
         </div>
         <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={uploadToFirebase}
-            disabled={uploading}
-            className="inline-flex items-center justify-center rounded-full border border-brand-blue/30 bg-brand-blue/5 px-4 py-2 text-xs font-semibold text-brand-blue transition hover:bg-brand-blue/10 disabled:opacity-50"
-          >
-            {uploading ? "Uploading..." : "Sync to Cloud"}
-          </button>
+          {/* Sync to Cloud button removed */}
           <button
             type="button"
             onClick={openCreate}
@@ -177,8 +235,8 @@ export function OrganizerDashboard() {
       <div className="flex border-b border-slate-200">
         <button
           className={`px-6 py-3 text-sm font-medium transition-all ${activeTab === "my-events"
-              ? "border-b-2 border-brand-blue text-brand-blue"
-              : "text-slate-500 hover:text-slate-700"
+            ? "border-b-2 border-brand-blue text-brand-blue"
+            : "text-black hover:text-slate-900"
             }`}
           onClick={() => setActiveTab("my-events")}
         >
@@ -186,8 +244,8 @@ export function OrganizerDashboard() {
         </button>
         <button
           className={`px-6 py-3 text-sm font-medium transition-all ${activeTab === "all-events"
-              ? "border-b-2 border-brand-blue text-brand-blue"
-              : "text-slate-500 hover:text-slate-700"
+            ? "border-b-2 border-brand-blue text-brand-blue"
+            : "text-black hover:text-slate-900"
             }`}
           onClick={() => setActiveTab("all-events")}
         >
@@ -199,85 +257,111 @@ export function OrganizerDashboard() {
 
         {/* Left Column: Events List */}
         <section className="space-y-6">
-          <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100">
+          <h2 className="text-xl font-bold text-black dark:text-slate-100">
             {activeTab === "my-events" ? "Your Managed Events" : "All Scheduled Events"}
           </h2>
 
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+          <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-2">
             {(activeTab === "my-events" ? myEvents : events).map((event) => (
               <article
                 key={event.id}
-                className="group relative flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:shadow-md dark:border-slate-800 dark:bg-slate-900/70"
+                className="group relative flex flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl dark:border-slate-800 dark:bg-slate-900"
               >
-                {event.imageUrl ? (
-                  <div className="h-40 w-full overflow-hidden bg-slate-100">
-                    <img src={event.imageUrl} alt={event.title} className="h-full w-full object-cover transition duration-500 group-hover:scale-105" />
-                  </div>
-                ) : (
-                  <div className="h-40 w-full bg-gradient-to-br from-slate-100 to-slate-200" />
-                )}
+                {/* Image Section */}
+                <div className="relative h-48 w-full overflow-hidden">
+                  {event.imageUrl ? (
+                    <img
+                      src={event.imageUrl}
+                      alt={event.title}
+                      className="h-full w-full object-cover transition duration-700 group-hover:scale-110"
+                    />
+                  ) : (
+                    <div className="h-full w-full bg-gradient-to-br from-brand-blue/20 to-brand-pink/20" />
+                  )}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-60 transition-opacity group-hover:opacity-40" />
 
-                <div className="flex flex-1 flex-col p-4">
-                  <div className="mb-2 flex items-center justify-between">
-                    <span className="rounded-full bg-brand-pink/10 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-brand-pink">
+                  <div className="absolute top-4 left-4">
+                    <span className="inline-block rounded-full bg-white/90 px-3 py-1 text-xs font-bold uppercase tracking-wider text-brand-dark shadow-sm backdrop-blur-md">
                       {event.category}
                     </span>
-                    {event.createdByUid === currentUid && (
-                      <span className="text-[10px] font-medium text-slate-400">Owner</span>
+                  </div>
+
+                  {event.createdByUid === currentUid && (
+                    <div className="absolute top-4 right-4">
+                      <span className="inline-flex items-center rounded-full bg-brand-blue/90 px-3 py-1 text-xs font-bold text-white shadow-sm backdrop-blur-md">
+                        Owner
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Content Section */}
+                <div className="flex flex-1 flex-col p-6">
+                  <div className="mb-4">
+                    <h3 className="text-xl font-bold leading-tight text-slate-900 dark:text-white">
+                      {event.title}
+                    </h3>
+                    <p className="mt-2 text-sm leading-relaxed text-black line-clamp-2 dark:text-slate-400">
+                      {event.description}
+                    </p>
+                  </div>
+
+                  <div className="mt-auto space-y-4">
+                    <div className="flex flex-wrap gap-y-2 gap-x-4 text-sm text-black dark:text-slate-300">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-brand-blue">📅</span>
+                        <span className="font-medium">{event.date}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-brand-orange">⏰</span>
+                        <span className="font-medium">{event.time}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 w-full pt-1">
+                        <span className="text-brand-pink">📍</span>
+                        <span className="font-medium truncate">{event.location}</span>
+                      </div>
+                    </div>
+
+                    {activeTab === "my-events" ? (
+                      <div className="grid grid-cols-2 gap-3 border-t border-slate-100 pt-5 dark:border-slate-800">
+                        <button
+                          onClick={() => openEdit(event)}
+                          className="flex items-center justify-center rounded-xl bg-slate-50 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                        >
+                          Edit Details
+                        </button>
+                        <button
+                          onClick={() => handleDelete(event.id)}
+                          className="flex items-center justify-center rounded-xl bg-red-50 py-2.5 text-sm font-bold text-red-600 transition hover:bg-red-100 dark:bg-red-900/20 dark:text-red-400 dark:hover:bg-red-900/30"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    ) : (
+                      event.createdByUid !== currentUid && (
+                        <div className="border-t border-slate-100 pt-4 dark:border-slate-800">
+                          <p className="text-center text-xs font-medium text-slate-400">
+                            Organized by <span className="text-black dark:text-slate-300">{event.organizerName}</span>
+                          </p>
+                        </div>
+                      )
                     )}
                   </div>
-
-                  <h3 className="text-lg font-bold text-slate-900 dark:text-slate-50">{event.title}</h3>
-                  <p className="mt-1 text-xs text-slate-500 line-clamp-2">{event.description}</p>
-
-                  <div className="mt-4 grid grid-cols-2 gap-2 text-xs text-slate-600">
-                    <div>
-                      <span className="block font-semibold text-slate-900">Date</span>
-                      {event.date}
-                    </div>
-                    <div>
-                      <span className="block font-semibold text-slate-900">Time</span>
-                      {event.time}
-                    </div>
-                  </div>
-
-                  {activeTab === "my-events" && (
-                    <div className="mt-4 flex gap-2 border-t border-slate-100 pt-3">
-                      <button
-                        onClick={() => openEdit(event)}
-                        className="flex-1 rounded-lg border border-slate-200 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
-                      >
-                        Edit Details
-                      </button>
-                      <button
-                        onClick={() => handleDelete(event.id)}
-                        className="flex-1 rounded-lg border border-red-100 py-1.5 text-xs font-semibold text-red-600 transition hover:bg-red-50"
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  )}
-
-                  {activeTab === "all-events" && event.createdByUid !== currentUid && (
-                    <div className="mt-4 border-t border-slate-100 pt-3 text-center">
-                      <span className="text-xs text-slate-400">Organized by {event.organizerName}</span>
-                    </div>
-                  )}
                 </div>
               </article>
             ))}
             {(activeTab === "my-events" ? myEvents : events).length === 0 && (
-              <div className="col-span-full py-12 text-center text-slate-500">
+              <div className="col-span-full py-12 text-center text-black">
                 <p>No events found.</p>
               </div>
             )}
           </div>
         </section>
 
-        {/* Right Column: Registrations (Only relevant for My Events view mostly, but good to keep visible) */}
+        {/* Right Column: Registrations */}
         <section className="space-y-6">
           <div className="flex items-center justify-between">
-            <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100">Live Registrations</h2>
+            <h2 className="text-xl font-bold text-black dark:text-slate-100">Live Registrations</h2>
             <button
               onClick={downloadParticipants}
               className="text-xs font-bold text-brand-blue hover:underline"
@@ -291,7 +375,7 @@ export function OrganizerDashboard() {
               <div className="flex h-8 w-8 items-center justify-center rounded-full bg-green-100 text-green-600">
                 <span className="text-sm font-bold">{myRegistrations.length}</span>
               </div>
-              <span className="text-sm font-medium text-slate-600">Total Participants</span>
+              <span className="text-sm font-medium text-black">Total Participants</span>
             </div>
 
             {myRegistrations.length === 0 ? (
@@ -301,7 +385,7 @@ export function OrganizerDashboard() {
             ) : (
               <div className="max-h-[600px] overflow-y-auto pr-1">
                 <table className="w-full text-left text-xs">
-                  <thead className="sticky top-0 bg-white text-slate-500">
+                  <thead className="sticky top-0 bg-white text-black">
                     <tr>
                       <th className="pb-2 font-medium">Participant</th>
                       <th className="pb-2 font-medium">Event</th>
@@ -313,10 +397,10 @@ export function OrganizerDashboard() {
                       <tr key={reg.id}>
                         <td className="py-3">
                           <p className="font-semibold text-slate-900">{reg.name}</p>
-                          <p className="text-slate-500">{reg.collegeOrCompany}</p>
+                          <p className="text-black">{reg.collegeOrCompany}</p>
                         </td>
                         <td className="py-3">
-                          <p className="text-slate-700">{event?.title}</p>
+                          <p className="text-black">{event?.title}</p>
                         </td>
                         <td className="py-3">
                           <span className="inline-block rounded-full bg-green-50 px-2 py-0.5 text-[10px] font-bold text-green-600">
@@ -340,7 +424,7 @@ export function OrganizerDashboard() {
               <h2 className="text-2xl font-bold text-slate-900">
                 {mockEvents.some((e) => e.id === editingEvent.id) ? "Edit Event Details" : "Create New Event"}
               </h2>
-              <p className="mt-1 text-sm text-slate-500">
+              <p className="mt-1 text-sm text-black">
                 Provide comprehensive details to attract the best participants.
               </p>
             </div>
@@ -350,10 +434,10 @@ export function OrganizerDashboard() {
 
                 {/* Basic Info */}
                 <div className="sm:col-span-2">
-                  <h3 className="mb-4 text-xs font-bold uppercase tracking-wider text-slate-400">Basic Information</h3>
+                  <h3 className="mb-4 text-xs font-bold uppercase tracking-wider text-black">Basic Information</h3>
                   <div className="grid gap-4 sm:grid-cols-2">
                     <div className="sm:col-span-2">
-                      <label className="mb-1 block font-semibold text-slate-700">Event Title</label>
+                      <label className="mb-1 block font-semibold text-black">Event Title</label>
                       <input
                         type="text"
                         value={editingEvent.title}
@@ -363,7 +447,7 @@ export function OrganizerDashboard() {
                       />
                     </div>
                     <div>
-                      <label className="mb-1 block font-semibold text-slate-700">Category</label>
+                      <label className="mb-1 block font-semibold text-black">Category</label>
                       <select
                         value={editingEvent.category}
                         onChange={(e) => updateEditingField("category", e.target.value as EventCategory)}
@@ -378,7 +462,7 @@ export function OrganizerDashboard() {
                       </select>
                     </div>
                     <div>
-                      <label className="mb-1 block font-semibold text-slate-700">Registration Fee</label>
+                      <label className="mb-1 block font-semibold text-black">Registration Fee</label>
                       <input
                         type="text"
                         value={editingEvent.registrationFee || ""}
@@ -392,10 +476,10 @@ export function OrganizerDashboard() {
 
                 {/* Logistics */}
                 <div className="sm:col-span-2">
-                  <h3 className="mb-4 mt-2 text-xs font-bold uppercase tracking-wider text-slate-400">Logistics</h3>
+                  <h3 className="mb-4 mt-2 text-xs font-bold uppercase tracking-wider text-black">Logistics</h3>
                   <div className="grid gap-4 sm:grid-cols-2">
                     <div>
-                      <label className="mb-1 block font-semibold text-slate-700">Date</label>
+                      <label className="mb-1 block font-semibold text-black">Date</label>
                       <input
                         type="date"
                         value={editingEvent.date}
@@ -404,7 +488,7 @@ export function OrganizerDashboard() {
                       />
                     </div>
                     <div>
-                      <label className="mb-1 block font-semibold text-slate-700">Time</label>
+                      <label className="mb-1 block font-semibold text-black">Time</label>
                       <input
                         type="text"
                         value={editingEvent.time}
@@ -414,7 +498,7 @@ export function OrganizerDashboard() {
                       />
                     </div>
                     <div className="sm:col-span-2">
-                      <label className="mb-1 block font-semibold text-slate-700">Location</label>
+                      <label className="mb-1 block font-semibold text-black">Location</label>
                       <input
                         type="text"
                         value={editingEvent.location}
@@ -428,10 +512,10 @@ export function OrganizerDashboard() {
 
                 {/* Descriptions */}
                 <div className="sm:col-span-2">
-                  <h3 className="mb-4 mt-2 text-xs font-bold uppercase tracking-wider text-slate-400">Content & Rules</h3>
+                  <h3 className="mb-4 mt-2 text-xs font-bold uppercase tracking-wider text-black">Content & Rules</h3>
                   <div className="space-y-4">
                     <div>
-                      <label className="mb-1 block font-semibold text-slate-700">Short Description</label>
+                      <label className="mb-1 block font-semibold text-black">Short Description</label>
                       <input
                         type="text"
                         value={editingEvent.description}
@@ -441,7 +525,7 @@ export function OrganizerDashboard() {
                       />
                     </div>
                     <div>
-                      <label className="mb-1 block font-semibold text-slate-700">Detailed About Event</label>
+                      <label className="mb-1 block font-semibold text-black">Detailed About Event</label>
                       <textarea
                         value={editingEvent.aboutEvent || ""}
                         onChange={(e) => updateEditingField("aboutEvent", e.target.value)}
@@ -451,7 +535,7 @@ export function OrganizerDashboard() {
                       />
                     </div>
                     <div>
-                      <label className="mb-1 block font-semibold text-slate-700">Rules & Guidelines</label>
+                      <label className="mb-1 block font-semibold text-black">Rules & Guidelines</label>
                       <textarea
                         value={editingEvent.rules || ""}
                         onChange={(e) => updateEditingField("rules", e.target.value)}
@@ -465,10 +549,10 @@ export function OrganizerDashboard() {
 
                 {/* Prizes & Media */}
                 <div className="sm:col-span-2">
-                  <h3 className="mb-4 mt-2 text-xs font-bold uppercase tracking-wider text-slate-400">Prizes & Media</h3>
+                  <h3 className="mb-4 mt-2 text-xs font-bold uppercase tracking-wider text-black">Prizes & Media</h3>
                   <div className="grid gap-4 sm:grid-cols-2">
                     <div className="sm:col-span-2">
-                      <label className="mb-1 block font-semibold text-slate-700">Prizes</label>
+                      <label className="mb-1 block font-semibold text-black">Prizes</label>
                       <input
                         type="text"
                         value={editingEvent.prizes || ""}
@@ -478,34 +562,37 @@ export function OrganizerDashboard() {
                       />
                     </div>
                     <div>
-                      <label className="mb-1 block font-semibold text-slate-700">Poster URL</label>
+                      <label className="mb-1 block font-semibold text-black">Poster Image</label>
                       <input
-                        type="text"
-                        value={editingEvent.posterUrl || ""}
-                        onChange={(e) => updateEditingField("posterUrl", e.target.value)}
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => setPosterFile(e.target.files ? e.target.files[0] : null)}
                         className="w-full rounded-lg border border-slate-300 px-3 py-2"
                       />
+                      {editingEvent.posterUrl && !posterFile && <span className="text-xs text-green-600">Current file exists</span>}
                     </div>
                     <div>
-                      <label className="mb-1 block font-semibold text-slate-700">Brochure URL</label>
+                      <label className="mb-1 block font-semibold text-black">Brochure (PDF/Image)</label>
                       <input
-                        type="text"
-                        value={editingEvent.brochureUrl || ""}
-                        onChange={(e) => updateEditingField("brochureUrl", e.target.value)}
+                        type="file"
+                        accept="image/*,application/pdf"
+                        onChange={(e) => setBrochureFile(e.target.files ? e.target.files[0] : null)}
                         className="w-full rounded-lg border border-slate-300 px-3 py-2"
                       />
+                      {editingEvent.brochureUrl && !brochureFile && <span className="text-xs text-green-600">Current file exists</span>}
                     </div>
                     <div>
-                      <label className="mb-1 block font-semibold text-slate-700">Title Image URL</label>
+                      <label className="mb-1 block font-semibold text-black">Title Image</label>
                       <input
-                        type="text"
-                        value={editingEvent.imageUrl || ""}
-                        onChange={(e) => updateEditingField("imageUrl", e.target.value)}
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => setImageFile(e.target.files ? e.target.files[0] : null)}
                         className="w-full rounded-lg border border-slate-300 px-3 py-2"
                       />
+                      {editingEvent.imageUrl && !imageFile && <span className="text-xs text-green-600">Current file exists</span>}
                     </div>
                     <div>
-                      <label className="mb-1 block font-semibold text-slate-700">Team Size</label>
+                      <label className="mb-1 block font-semibold text-black">Team Size</label>
                       <input
                         type="text"
                         value={editingEvent.teamSize || ""}
@@ -523,16 +610,25 @@ export function OrganizerDashboard() {
               <button
                 type="button"
                 onClick={() => setEditingEvent(null)}
-                className="rounded-full border border-slate-300 px-6 py-2.5 font-semibold text-slate-700 transition hover:bg-slate-50"
+                disabled={isUploading}
+                className="rounded-full border border-slate-300 px-6 py-2.5 font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={handleSave}
-                className="rounded-full bg-slate-900 px-8 py-2.5 font-bold text-white shadow-xl hover:bg-slate-800"
+                disabled={isUploading}
+                className="rounded-full bg-slate-900 px-8 py-2.5 font-bold text-white shadow-xl hover:bg-slate-800 disabled:opacity-50 flex items-center gap-2"
               >
-                Save Event
+                {isUploading ? (
+                  <>
+                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/20 border-t-white" />
+                    Uploading...
+                  </>
+                ) : (
+                  "Save Event"
+                )}
               </button>
             </div>
           </div>
