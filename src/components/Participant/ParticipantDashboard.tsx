@@ -1,7 +1,9 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { mockEvents } from "../../mockData";
-import type { EventCategory } from "../../types";
+import type { Event, EventCategory } from "../../types";
+import { db } from "../../firebaseConfig";
+import { collection, onSnapshot } from "firebase/firestore";
 
 const categories: EventCategory[] = [
   "Hackathons",
@@ -14,15 +16,40 @@ const categories: EventCategory[] = [
 
 export function ParticipantDashboard({ limit }: { limit?: number }) {
   const [activeCategory, setActiveCategory] = useState<EventCategory | "All">("All");
+  const [events, setEvents] = useState<Event[]>(mockEvents);
   const navigate = useNavigate();
 
+  // Fetch real events from Firebase to merge with mock events
+  useEffect(() => {
+    const unsubscribe = onSnapshot(collection(db, "events"), (snapshot) => {
+      const fetchedEvents: Event[] = [];
+      snapshot.forEach((doc) => {
+        fetchedEvents.push(doc.data() as Event);
+      });
+      // Merge unique events (Firebase events override mock events with same id)
+      setEvents(() => {
+        const unique = [...mockEvents];
+        fetchedEvents.forEach(fe => {
+          const existingIdx = unique.findIndex(e => e.id === fe.id);
+          if (existingIdx === -1) {
+            unique.push(fe);
+          } else {
+            unique[existingIdx] = fe;
+          }
+        });
+        return unique;
+      });
+    });
+    return () => unsubscribe();
+  }, []);
+
   const filteredEvents = useMemo(() => {
-    let events = mockEvents;
+    let filtered = events;
     if (activeCategory !== "All") {
-      events = mockEvents.filter((e) => e.category === activeCategory);
+      filtered = events.filter((e) => e.category === activeCategory);
     }
-    return limit ? events.slice(0, limit) : events;
-  }, [activeCategory, limit]);
+    return limit ? filtered.slice(0, limit) : filtered;
+  }, [activeCategory, limit, events]);
 
   const handleRegisterClick = (eventId: string) => {
     navigate(`/register/${eventId}`);
