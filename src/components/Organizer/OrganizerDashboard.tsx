@@ -135,22 +135,47 @@ export function OrganizerDashboard() {
       let updatedEvent = { ...editingEvent };
       const eventId = updatedEvent.id;
 
-      // Upload files if selected
-      if (imageFile) {
-        const url = await uploadFile(imageFile, `events/${eventId}/image_${imageFile.name}`);
-        updatedEvent.imageUrl = url;
-      }
-      if (posterFile) {
-        const url = await uploadFile(posterFile, `events/${eventId}/poster_${posterFile.name}`);
-        updatedEvent.posterUrl = url;
-      }
-      if (brochureFile) {
-        const url = await uploadFile(brochureFile, `events/${eventId}/brochure_${brochureFile.name}`);
-        updatedEvent.brochureUrl = url;
-      }
+      const hasFiles = imageFile || posterFile || brochureFile;
 
-      // Save to Firebase
-      await setDoc(doc(db, "events", eventId), updatedEvent);
+      // If no files, save immediately for instant feedback
+      if (!hasFiles) {
+        await setDoc(doc(db, "events", eventId), updatedEvent);
+      } else {
+        // Upload all files in parallel for faster performance
+        const uploadPromises: Promise<{ type: string; url: string }>[] = [];
+
+        if (imageFile) {
+          uploadPromises.push(
+            uploadFile(imageFile, `events/${eventId}/image_${imageFile.name}`)
+              .then(url => ({ type: 'image', url }))
+          );
+        }
+        if (posterFile) {
+          uploadPromises.push(
+            uploadFile(posterFile, `events/${eventId}/poster_${posterFile.name}`)
+              .then(url => ({ type: 'poster', url }))
+          );
+        }
+        if (brochureFile) {
+          uploadPromises.push(
+            uploadFile(brochureFile, `events/${eventId}/brochure_${brochureFile.name}`)
+              .then(url => ({ type: 'brochure', url }))
+          );
+        }
+
+        // Wait for all uploads to complete in parallel
+        const uploadResults = await Promise.all(uploadPromises);
+
+        // Apply the URLs to the event
+        uploadResults.forEach(result => {
+          if (result.type === 'image') updatedEvent.imageUrl = result.url;
+          if (result.type === 'poster') updatedEvent.posterUrl = result.url;
+          if (result.type === 'brochure') updatedEvent.brochureUrl = result.url;
+        });
+
+        // Save to Firebase with file URLs
+        await setDoc(doc(db, "events", eventId), updatedEvent);
+      }
 
       // Update local state immediately for responsiveness
       setEvents((prev) => {
@@ -418,40 +443,68 @@ export function OrganizerDashboard() {
       </div>
 
       {editingEvent && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm overflow-y-auto">
-          <div className="my-8 w-full max-w-3xl rounded-3xl bg-white shadow-2xl">
-            <div className="border-b border-slate-100 px-8 py-6">
-              <h2 className="text-2xl font-bold text-slate-900">
-                {mockEvents.some((e) => e.id === editingEvent.id) ? "Edit Event Details" : "Create New Event"}
-              </h2>
-              <p className="mt-1 text-sm text-black">
-                Provide comprehensive details to attract the best participants.
-              </p>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-md overflow-y-auto">
+          <div className="my-8 w-full max-w-4xl overflow-hidden rounded-2xl bg-white shadow-2xl">
+
+            {/* Header with Gradient */}
+            <div className="relative bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-500 px-8 py-8">
+              <button
+                onClick={() => setEditingEvent(null)}
+                disabled={isUploading}
+                className="absolute top-4 right-4 flex h-10 w-10 items-center justify-center rounded-full bg-white/20 text-white backdrop-blur-sm transition hover:bg-white/30 disabled:opacity-50"
+              >
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+              <div className="flex items-center gap-4">
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/20 backdrop-blur-sm">
+                  <svg className="h-7 w-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                  </svg>
+                </div>
+                <div>
+                  <h2 className="text-2xl font-bold text-white">
+                    {mockEvents.some((e) => e.id === editingEvent.id) ? "Edit Event" : "Create New Event"}
+                  </h2>
+                  <p className="mt-1 text-white/80">
+                    Fill in the details to create an amazing event
+                  </p>
+                </div>
+              </div>
             </div>
 
-            <div className="max-h-[calc(100vh-200px)] overflow-y-auto px-8 py-6">
-              <div className="grid gap-6 text-sm sm:grid-cols-2">
+            {/* Form Content */}
+            <div className="max-h-[calc(100vh-280px)] overflow-y-auto px-8 py-8">
+              <div className="space-y-8">
 
-                {/* Basic Info */}
-                <div className="sm:col-span-2">
-                  <h3 className="mb-4 text-xs font-bold uppercase tracking-wider text-black">Basic Information</h3>
-                  <div className="grid gap-4 sm:grid-cols-2">
+                {/* Section 1: Event Details */}
+                <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-6">
+                  <div className="mb-5 flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-100">
+                      <svg className="h-5 w-5 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </div>
+                    <h3 className="text-lg font-bold text-slate-800">Event Details</h3>
+                  </div>
+                  <div className="grid gap-5 sm:grid-cols-2">
                     <div className="sm:col-span-2">
-                      <label className="mb-1 block font-semibold text-black">Event Title</label>
+                      <label className="mb-2 block text-sm font-semibold text-slate-700">Event Title *</label>
                       <input
                         type="text"
                         value={editingEvent.title}
                         onChange={(e) => updateEditingField("title", e.target.value)}
-                        className="w-full rounded-lg border border-slate-300 px-3 py-2 focus:border-brand-blue focus:ring-1 focus:ring-brand-blue"
+                        className="w-full rounded-xl border-2 border-slate-200 bg-white px-4 py-3 text-slate-800 placeholder-slate-400 transition focus:border-indigo-500 focus:outline-none focus:ring-4 focus:ring-indigo-500/10"
                         placeholder="e.g. CodeStorm 2026"
                       />
                     </div>
                     <div>
-                      <label className="mb-1 block font-semibold text-black">Category</label>
+                      <label className="mb-2 block text-sm font-semibold text-slate-700">Category *</label>
                       <select
                         value={editingEvent.category}
                         onChange={(e) => updateEditingField("category", e.target.value as EventCategory)}
-                        className="w-full rounded-lg border border-slate-300 px-3 py-2"
+                        className="w-full rounded-xl border-2 border-slate-200 bg-white px-4 py-3 text-slate-800 transition focus:border-indigo-500 focus:outline-none focus:ring-4 focus:ring-indigo-500/10"
                       >
                         <option>Hackathons</option>
                         <option>Art Competitions</option>
@@ -462,143 +515,215 @@ export function OrganizerDashboard() {
                       </select>
                     </div>
                     <div>
-                      <label className="mb-1 block font-semibold text-black">Registration Fee</label>
+                      <label className="mb-2 block text-sm font-semibold text-slate-700">Registration Fee</label>
                       <input
                         type="text"
                         value={editingEvent.registrationFee || ""}
                         onChange={(e) => updateEditingField("registrationFee", e.target.value)}
-                        className="w-full rounded-lg border border-slate-300 px-3 py-2"
-                        placeholder="e.g. Free or $10"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Logistics */}
-                <div className="sm:col-span-2">
-                  <h3 className="mb-4 mt-2 text-xs font-bold uppercase tracking-wider text-black">Logistics</h3>
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <div>
-                      <label className="mb-1 block font-semibold text-black">Date</label>
-                      <input
-                        type="date"
-                        value={editingEvent.date}
-                        onChange={(e) => updateEditingField("date", e.target.value)}
-                        className="w-full rounded-lg border border-slate-300 px-3 py-2"
+                        className="w-full rounded-xl border-2 border-slate-200 bg-white px-4 py-3 text-slate-800 placeholder-slate-400 transition focus:border-indigo-500 focus:outline-none focus:ring-4 focus:ring-indigo-500/10"
+                        placeholder="Free or ₹500"
                       />
                     </div>
                     <div>
-                      <label className="mb-1 block font-semibold text-black">Time</label>
-                      <input
-                        type="text"
-                        value={editingEvent.time}
-                        onChange={(e) => updateEditingField("time", e.target.value)}
-                        className="w-full rounded-lg border border-slate-300 px-3 py-2"
-                        placeholder="10:00 AM - 4:00 PM"
-                      />
-                    </div>
-                    <div className="sm:col-span-2">
-                      <label className="mb-1 block font-semibold text-black">Location</label>
-                      <input
-                        type="text"
-                        value={editingEvent.location}
-                        onChange={(e) => updateEditingField("location", e.target.value)}
-                        className="w-full rounded-lg border border-slate-300 px-3 py-2"
-                        placeholder="Full address or venue name"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Descriptions */}
-                <div className="sm:col-span-2">
-                  <h3 className="mb-4 mt-2 text-xs font-bold uppercase tracking-wider text-black">Content & Rules</h3>
-                  <div className="space-y-4">
-                    <div>
-                      <label className="mb-1 block font-semibold text-black">Short Description</label>
-                      <input
-                        type="text"
-                        value={editingEvent.description}
-                        onChange={(e) => updateEditingField("description", e.target.value)}
-                        className="w-full rounded-lg border border-slate-300 px-3 py-2"
-                        placeholder="Brief summary for list view"
-                      />
-                    </div>
-                    <div>
-                      <label className="mb-1 block font-semibold text-black">Detailed About Event</label>
-                      <textarea
-                        value={editingEvent.aboutEvent || ""}
-                        onChange={(e) => updateEditingField("aboutEvent", e.target.value)}
-                        rows={4}
-                        className="w-full rounded-lg border border-slate-300 px-3 py-2"
-                        placeholder="Full event details, agenda, etc."
-                      />
-                    </div>
-                    <div>
-                      <label className="mb-1 block font-semibold text-black">Rules & Guidelines</label>
-                      <textarea
-                        value={editingEvent.rules || ""}
-                        onChange={(e) => updateEditingField("rules", e.target.value)}
-                        rows={3}
-                        className="w-full rounded-lg border border-slate-300 px-3 py-2"
-                        placeholder="List any rules, prerequisites, or code of conduct."
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Prizes & Media */}
-                <div className="sm:col-span-2">
-                  <h3 className="mb-4 mt-2 text-xs font-bold uppercase tracking-wider text-black">Prizes & Media</h3>
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <div className="sm:col-span-2">
-                      <label className="mb-1 block font-semibold text-black">Prizes</label>
-                      <input
-                        type="text"
-                        value={editingEvent.prizes || ""}
-                        onChange={(e) => updateEditingField("prizes", e.target.value)}
-                        className="w-full rounded-lg border border-slate-300 px-3 py-2"
-                        placeholder="e.g. 1st Place $1000"
-                      />
-                    </div>
-                    <div>
-                      <label className="mb-1 block font-semibold text-black">Poster Image</label>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={(e) => setPosterFile(e.target.files ? e.target.files[0] : null)}
-                        className="w-full rounded-lg border border-slate-300 px-3 py-2"
-                      />
-                      {editingEvent.posterUrl && !posterFile && <span className="text-xs text-green-600">Current file exists</span>}
-                    </div>
-                    <div>
-                      <label className="mb-1 block font-semibold text-black">Brochure (PDF/Image)</label>
-                      <input
-                        type="file"
-                        accept="image/*,application/pdf"
-                        onChange={(e) => setBrochureFile(e.target.files ? e.target.files[0] : null)}
-                        className="w-full rounded-lg border border-slate-300 px-3 py-2"
-                      />
-                      {editingEvent.brochureUrl && !brochureFile && <span className="text-xs text-green-600">Current file exists</span>}
-                    </div>
-                    <div>
-                      <label className="mb-1 block font-semibold text-black">Title Image</label>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={(e) => setImageFile(e.target.files ? e.target.files[0] : null)}
-                        className="w-full rounded-lg border border-slate-300 px-3 py-2"
-                      />
-                      {editingEvent.imageUrl && !imageFile && <span className="text-xs text-green-600">Current file exists</span>}
-                    </div>
-                    <div>
-                      <label className="mb-1 block font-semibold text-black">Team Size</label>
+                      <label className="mb-2 block text-sm font-semibold text-slate-700">Team Size</label>
                       <input
                         type="text"
                         value={editingEvent.teamSize || ""}
                         onChange={(e) => updateEditingField("teamSize", e.target.value)}
-                        className="w-full rounded-lg border border-slate-300 px-3 py-2"
+                        className="w-full rounded-xl border-2 border-slate-200 bg-white px-4 py-3 text-slate-800 placeholder-slate-400 transition focus:border-indigo-500 focus:outline-none focus:ring-4 focus:ring-indigo-500/10"
+                        placeholder="Individual or 2-4 members"
                       />
+                    </div>
+                    <div>
+                      <label className="mb-2 block text-sm font-semibold text-slate-700">Prizes</label>
+                      <input
+                        type="text"
+                        value={editingEvent.prizes || ""}
+                        onChange={(e) => updateEditingField("prizes", e.target.value)}
+                        className="w-full rounded-xl border-2 border-slate-200 bg-white px-4 py-3 text-slate-800 placeholder-slate-400 transition focus:border-indigo-500 focus:outline-none focus:ring-4 focus:ring-indigo-500/10"
+                        placeholder="1st: ₹10,000, 2nd: ₹5,000"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Section 2: Date, Time & Location */}
+                <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-6">
+                  <div className="mb-5 flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-purple-100">
+                      <svg className="h-5 w-5 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                    </div>
+                    <h3 className="text-lg font-bold text-slate-800">Date, Time & Location</h3>
+                  </div>
+                  <div className="grid gap-5 sm:grid-cols-2">
+                    <div>
+                      <label className="mb-2 block text-sm font-semibold text-slate-700">Date *</label>
+                      <input
+                        type="date"
+                        value={editingEvent.date}
+                        onChange={(e) => updateEditingField("date", e.target.value)}
+                        className="w-full rounded-xl border-2 border-slate-200 bg-white px-4 py-3 text-slate-800 transition focus:border-purple-500 focus:outline-none focus:ring-4 focus:ring-purple-500/10"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-2 block text-sm font-semibold text-slate-700">Time *</label>
+                      <input
+                        type="text"
+                        value={editingEvent.time}
+                        onChange={(e) => updateEditingField("time", e.target.value)}
+                        className="w-full rounded-xl border-2 border-slate-200 bg-white px-4 py-3 text-slate-800 placeholder-slate-400 transition focus:border-purple-500 focus:outline-none focus:ring-4 focus:ring-purple-500/10"
+                        placeholder="10:00 AM - 6:00 PM"
+                      />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <label className="mb-2 block text-sm font-semibold text-slate-700">Location *</label>
+                      <input
+                        type="text"
+                        value={editingEvent.location}
+                        onChange={(e) => updateEditingField("location", e.target.value)}
+                        className="w-full rounded-xl border-2 border-slate-200 bg-white px-4 py-3 text-slate-800 placeholder-slate-400 transition focus:border-purple-500 focus:outline-none focus:ring-4 focus:ring-purple-500/10"
+                        placeholder="Main Auditorium, Building A"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Section 3: Description & Rules */}
+                <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-6">
+                  <div className="mb-5 flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-pink-100">
+                      <svg className="h-5 w-5 text-pink-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                    </div>
+                    <h3 className="text-lg font-bold text-slate-800">Description & Rules</h3>
+                  </div>
+                  <div className="space-y-5">
+                    <div>
+                      <label className="mb-2 block text-sm font-semibold text-slate-700">Short Description *</label>
+                      <input
+                        type="text"
+                        value={editingEvent.description}
+                        onChange={(e) => updateEditingField("description", e.target.value)}
+                        className="w-full rounded-xl border-2 border-slate-200 bg-white px-4 py-3 text-slate-800 placeholder-slate-400 transition focus:border-pink-500 focus:outline-none focus:ring-4 focus:ring-pink-500/10"
+                        placeholder="A one-line summary of your event"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-2 block text-sm font-semibold text-slate-700">About Event</label>
+                      <textarea
+                        value={editingEvent.aboutEvent || ""}
+                        onChange={(e) => updateEditingField("aboutEvent", e.target.value)}
+                        rows={3}
+                        className="w-full rounded-xl border-2 border-slate-200 bg-white px-4 py-3 text-slate-800 placeholder-slate-400 transition focus:border-pink-500 focus:outline-none focus:ring-4 focus:ring-pink-500/10"
+                        placeholder="Detailed description, agenda, what participants will learn..."
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-2 block text-sm font-semibold text-slate-700">Rules & Guidelines</label>
+                      <textarea
+                        value={editingEvent.rules || ""}
+                        onChange={(e) => updateEditingField("rules", e.target.value)}
+                        rows={2}
+                        className="w-full rounded-xl border-2 border-slate-200 bg-white px-4 py-3 text-slate-800 placeholder-slate-400 transition focus:border-pink-500 focus:outline-none focus:ring-4 focus:ring-pink-500/10"
+                        placeholder="Any specific rules, eligibility criteria, or code of conduct..."
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Section 4: Media Uploads */}
+                <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-6">
+                  <div className="mb-5 flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-100">
+                      <svg className="h-5 w-5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                    </div>
+                    <h3 className="text-lg font-bold text-slate-800">Media & Attachments</h3>
+                  </div>
+                  <div className="grid gap-5 sm:grid-cols-3">
+                    {/* Event Image */}
+                    <div className="group relative">
+                      <label className="mb-2 block text-sm font-semibold text-slate-700">Event Image</label>
+                      <div className="relative cursor-pointer overflow-hidden rounded-xl border-2 border-dashed border-slate-300 bg-white p-4 text-center transition hover:border-indigo-400 hover:bg-indigo-50/50">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => setImageFile(e.target.files ? e.target.files[0] : null)}
+                          className="absolute inset-0 cursor-pointer opacity-0"
+                        />
+                        <div className="flex flex-col items-center gap-2 py-2">
+                          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 group-hover:bg-indigo-100">
+                            <svg className="h-5 w-5 text-slate-400 group-hover:text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                          </div>
+                          {imageFile ? (
+                            <span className="text-xs font-medium text-indigo-600">{imageFile.name}</span>
+                          ) : editingEvent.imageUrl ? (
+                            <span className="text-xs font-medium text-green-600">✓ Image uploaded</span>
+                          ) : (
+                            <span className="text-xs text-slate-500">Click to upload</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Poster */}
+                    <div className="group relative">
+                      <label className="mb-2 block text-sm font-semibold text-slate-700">Poster</label>
+                      <div className="relative cursor-pointer overflow-hidden rounded-xl border-2 border-dashed border-slate-300 bg-white p-4 text-center transition hover:border-purple-400 hover:bg-purple-50/50">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => setPosterFile(e.target.files ? e.target.files[0] : null)}
+                          className="absolute inset-0 cursor-pointer opacity-0"
+                        />
+                        <div className="flex flex-col items-center gap-2 py-2">
+                          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 group-hover:bg-purple-100">
+                            <svg className="h-5 w-5 text-slate-400 group-hover:text-purple-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                          </div>
+                          {posterFile ? (
+                            <span className="text-xs font-medium text-purple-600">{posterFile.name}</span>
+                          ) : editingEvent.posterUrl ? (
+                            <span className="text-xs font-medium text-green-600">✓ Poster uploaded</span>
+                          ) : (
+                            <span className="text-xs text-slate-500">Click to upload</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Brochure */}
+                    <div className="group relative">
+                      <label className="mb-2 block text-sm font-semibold text-slate-700">Brochure</label>
+                      <div className="relative cursor-pointer overflow-hidden rounded-xl border-2 border-dashed border-slate-300 bg-white p-4 text-center transition hover:border-pink-400 hover:bg-pink-50/50">
+                        <input
+                          type="file"
+                          accept="image/*,application/pdf"
+                          onChange={(e) => setBrochureFile(e.target.files ? e.target.files[0] : null)}
+                          className="absolute inset-0 cursor-pointer opacity-0"
+                        />
+                        <div className="flex flex-col items-center gap-2 py-2">
+                          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 group-hover:bg-pink-100">
+                            <svg className="h-5 w-5 text-slate-400 group-hover:text-pink-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                            </svg>
+                          </div>
+                          {brochureFile ? (
+                            <span className="text-xs font-medium text-pink-600">{brochureFile.name}</span>
+                          ) : editingEvent.brochureUrl ? (
+                            <span className="text-xs font-medium text-green-600">✓ Brochure uploaded</span>
+                          ) : (
+                            <span className="text-xs text-slate-500">PDF or Image</span>
+                          )}
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -606,30 +731,41 @@ export function OrganizerDashboard() {
               </div>
             </div>
 
-            <div className="flex justify-end gap-3 border-t border-slate-100 px-8 py-6">
-              <button
-                type="button"
-                onClick={() => setEditingEvent(null)}
-                disabled={isUploading}
-                className="rounded-full border border-slate-300 px-6 py-2.5 font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleSave}
-                disabled={isUploading}
-                className="rounded-full bg-slate-900 px-8 py-2.5 font-bold text-white shadow-xl hover:bg-slate-800 disabled:opacity-50 flex items-center gap-2"
-              >
-                {isUploading ? (
-                  <>
-                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/20 border-t-white" />
-                    Uploading...
-                  </>
-                ) : (
-                  "Save Event"
-                )}
-              </button>
+            {/* Footer Actions */}
+            <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-8 py-5">
+              <p className="text-sm text-slate-500">
+                <span className="text-red-500">*</span> Required fields
+              </p>
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setEditingEvent(null)}
+                  disabled={isUploading}
+                  className="rounded-xl border-2 border-slate-300 bg-white px-6 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSave}
+                  disabled={isUploading}
+                  className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 px-8 py-2.5 text-sm font-bold text-white shadow-lg shadow-indigo-500/30 transition hover:shadow-xl hover:shadow-indigo-500/40 disabled:opacity-50"
+                >
+                  {isUploading ? (
+                    <>
+                      <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      Save Event
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         </div>
