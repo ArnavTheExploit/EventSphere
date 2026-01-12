@@ -2,8 +2,6 @@ import { useMemo, useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { mockEvents } from "../../mockData";
 import type { Event, EventCategory } from "../../types";
-import { db } from "../../firebaseConfig";
-import { collection, onSnapshot } from "firebase/firestore";
 
 const categories: EventCategory[] = [
   "Hackathons",
@@ -19,28 +17,42 @@ export function ParticipantDashboard({ limit }: { limit?: number }) {
   const [events, setEvents] = useState<Event[]>(mockEvents);
   const navigate = useNavigate();
 
-  // Fetch real events from Firebase to merge with mock events
+  // Load events from localStorage (saved by organizer) and merge with mock events
   useEffect(() => {
-    const unsubscribe = onSnapshot(collection(db, "events"), (snapshot) => {
-      const fetchedEvents: Event[] = [];
-      snapshot.forEach((doc) => {
-        fetchedEvents.push(doc.data() as Event);
-      });
-      // Merge unique events (Firebase events override mock events with same id)
-      setEvents(() => {
-        const unique = [...mockEvents];
-        fetchedEvents.forEach(fe => {
-          const existingIdx = unique.findIndex(e => e.id === fe.id);
-          if (existingIdx === -1) {
-            unique.push(fe);
-          } else {
-            unique[existingIdx] = fe;
-          }
-        });
-        return unique;
-      });
-    });
-    return () => unsubscribe();
+    const loadEvents = () => {
+      const savedEvents = localStorage.getItem('eventsphere_events');
+      if (savedEvents) {
+        try {
+          const parsed = JSON.parse(savedEvents) as Event[];
+          setEvents(() => {
+            const merged = [...mockEvents];
+            parsed.forEach(se => {
+              const existingIdx = merged.findIndex(e => e.id === se.id);
+              if (existingIdx === -1) {
+                merged.push(se);
+              } else {
+                merged[existingIdx] = se;
+              }
+            });
+            return merged;
+          });
+        } catch (e) {
+          console.error('Error loading saved events:', e);
+        }
+      }
+    };
+
+    loadEvents();
+
+    // Listen for storage changes (when organizer adds new events)
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'eventsphere_events') {
+        loadEvents();
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
   }, []);
 
   const filteredEvents = useMemo(() => {

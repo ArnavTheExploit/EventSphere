@@ -2,9 +2,8 @@ import { useMemo, useState, useEffect } from "react";
 import { mockEvents, mockParticipants } from "../../mockData";
 import type { Event, EventCategory, Registration } from "../../types";
 import { useAuth } from "../../context/AuthContext";
-import { db, storage } from "../../firebaseConfig";
-import { collection, doc, setDoc, onSnapshot } from "firebase/firestore";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { db } from "../../firebaseConfig";
+import { collection, onSnapshot } from "firebase/firestore";
 
 export function OrganizerDashboard() {
   const { user } = useAuth();
@@ -64,9 +63,11 @@ export function OrganizerDashboard() {
     return () => unsubscribe();
   }, []);
 
+  // For "My Events" tab, show all events (organizer can manage all)
+  // For "All Events" tab, also show all events
   const myEvents = useMemo(
-    () => events.filter((e) => e.createdByUid === currentUid),
-    [events, currentUid]
+    () => events,
+    [events]
   );
 
   const otherEvents = useMemo(
@@ -117,11 +118,45 @@ export function OrganizerDashboard() {
     setPosterFile(null);
   };
 
-  const uploadFile = async (file: File, path: string): Promise<string> => {
-    const storageRef = ref(storage, path);
-    await uploadBytes(storageRef, file);
-    return await getDownloadURL(storageRef);
+  // Convert file to base64 for local storage
+  const fileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = (error) => reject(error);
+    });
   };
+
+  // Save events to localStorage
+  const saveEventsToLocalStorage = (eventsToSave: Event[]) => {
+    localStorage.setItem('eventsphere_events', JSON.stringify(eventsToSave));
+  };
+
+  // Load events from localStorage on mount
+  useEffect(() => {
+    const savedEvents = localStorage.getItem('eventsphere_events');
+    if (savedEvents) {
+      try {
+        const parsed = JSON.parse(savedEvents) as Event[];
+        setEvents((prev) => {
+          // Merge saved events with mock events
+          const merged = [...mockEvents];
+          parsed.forEach(se => {
+            const existingIdx = merged.findIndex(e => e.id === se.id);
+            if (existingIdx === -1) {
+              merged.push(se);
+            } else {
+              merged[existingIdx] = se;
+            }
+          });
+          return merged;
+        });
+      } catch (e) {
+        console.error('Error loading saved events:', e);
+      }
+    }
+  }, []);
 
   const handleSave = async () => {
     if (!editingEvent) return;
@@ -129,28 +164,22 @@ export function OrganizerDashboard() {
 
     try {
       let updatedEvent = { ...editingEvent };
-      const eventId = updatedEvent.id;
 
-      // If no poster file, save immediately for instant feedback
-      if (!posterFile) {
-        await setDoc(doc(db, "events", eventId), updatedEvent);
-      } else {
-        // Upload poster file
-        const posterUrl = await uploadFile(posterFile, `events/${eventId}/poster_${posterFile.name}`);
-        updatedEvent.posterUrl = posterUrl;
-
-        // Save to Firebase with poster URL
-        await setDoc(doc(db, "events", eventId), updatedEvent);
+      // If poster file selected, convert to base64
+      if (posterFile) {
+        const base64Poster = await fileToBase64(posterFile);
+        updatedEvent.posterUrl = base64Poster;
       }
 
-      // Update local state immediately for responsiveness
-      setEvents((prev) => {
-        const exists = prev.some((e) => e.id === eventId);
-        if (exists) {
-          return prev.map((e) => (e.id === eventId ? updatedEvent : e));
-        }
-        return [...prev, updatedEvent];
-      });
+      // Update local state
+      const newEvents = events.some((e) => e.id === updatedEvent.id)
+        ? events.map((e) => (e.id === updatedEvent.id ? updatedEvent : e))
+        : [...events, updatedEvent];
+
+      setEvents(newEvents);
+
+      // Save to localStorage for persistence
+      saveEventsToLocalStorage(newEvents.filter(e => !mockEvents.some(me => me.id === e.id)));
 
       setEditingEvent(null);
       resetFiles();
