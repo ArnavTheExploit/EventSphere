@@ -16,10 +16,8 @@ export function OrganizerDashboard() {
 
   const [editingEvent, setEditingEvent] = useState<Event | null>(null);
 
-  // File states for upload
-  const [imageFile, setImageFile] = useState<File | null>(null);
+  // File state for poster upload
   const [posterFile, setPosterFile] = useState<File | null>(null);
-  const [brochureFile, setBrochureFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
 
   const currentUid = user?.uid ?? "organizer-demo-1";
@@ -116,9 +114,7 @@ export function OrganizerDashboard() {
   };
 
   const resetFiles = () => {
-    setImageFile(null);
     setPosterFile(null);
-    setBrochureFile(null);
   };
 
   const uploadFile = async (file: File, path: string): Promise<string> => {
@@ -135,45 +131,15 @@ export function OrganizerDashboard() {
       let updatedEvent = { ...editingEvent };
       const eventId = updatedEvent.id;
 
-      const hasFiles = imageFile || posterFile || brochureFile;
-
-      // If no files, save immediately for instant feedback
-      if (!hasFiles) {
+      // If no poster file, save immediately for instant feedback
+      if (!posterFile) {
         await setDoc(doc(db, "events", eventId), updatedEvent);
       } else {
-        // Upload all files in parallel for faster performance
-        const uploadPromises: Promise<{ type: string; url: string }>[] = [];
+        // Upload poster file
+        const posterUrl = await uploadFile(posterFile, `events/${eventId}/poster_${posterFile.name}`);
+        updatedEvent.posterUrl = posterUrl;
 
-        if (imageFile) {
-          uploadPromises.push(
-            uploadFile(imageFile, `events/${eventId}/image_${imageFile.name}`)
-              .then(url => ({ type: 'image', url }))
-          );
-        }
-        if (posterFile) {
-          uploadPromises.push(
-            uploadFile(posterFile, `events/${eventId}/poster_${posterFile.name}`)
-              .then(url => ({ type: 'poster', url }))
-          );
-        }
-        if (brochureFile) {
-          uploadPromises.push(
-            uploadFile(brochureFile, `events/${eventId}/brochure_${brochureFile.name}`)
-              .then(url => ({ type: 'brochure', url }))
-          );
-        }
-
-        // Wait for all uploads to complete in parallel
-        const uploadResults = await Promise.all(uploadPromises);
-
-        // Apply the URLs to the event
-        uploadResults.forEach(result => {
-          if (result.type === 'image') updatedEvent.imageUrl = result.url;
-          if (result.type === 'poster') updatedEvent.posterUrl = result.url;
-          if (result.type === 'brochure') updatedEvent.brochureUrl = result.url;
-        });
-
-        // Save to Firebase with file URLs
+        // Save to Firebase with poster URL
         await setDoc(doc(db, "events", eventId), updatedEvent);
       }
 
@@ -294,14 +260,14 @@ export function OrganizerDashboard() {
               >
                 {/* Image Section */}
                 <div className="relative h-48 w-full overflow-hidden">
-                  {event.imageUrl ? (
+                  {event.posterUrl ? (
                     <img
-                      src={event.imageUrl}
+                      src={event.posterUrl}
                       alt={event.title}
                       className="h-full w-full object-cover transition duration-700 group-hover:scale-110"
                     />
                   ) : (
-                    <div className="h-full w-full bg-gradient-to-br from-brand-blue/20 to-brand-pink/20" />
+                    <div className="h-full w-full bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500" />
                   )}
                   <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-60 transition-opacity group-hover:opacity-40" />
 
@@ -634,7 +600,7 @@ export function OrganizerDashboard() {
                   </div>
                 </div>
 
-                {/* Section 4: Media Uploads */}
+                {/* Section 4: Event Poster */}
                 <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-6">
                   <div className="mb-5 flex items-center gap-3">
                     <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-100">
@@ -642,87 +608,33 @@ export function OrganizerDashboard() {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                       </svg>
                     </div>
-                    <h3 className="text-lg font-bold text-slate-800">Media & Attachments</h3>
+                    <h3 className="text-lg font-bold text-slate-800">Event Poster</h3>
                   </div>
-                  <div className="grid gap-5 sm:grid-cols-3">
-                    {/* Event Image */}
-                    <div className="group relative">
-                      <label className="mb-2 block text-sm font-semibold text-slate-700">Event Image</label>
-                      <div className="relative cursor-pointer overflow-hidden rounded-xl border-2 border-dashed border-slate-300 bg-white p-4 text-center transition hover:border-indigo-400 hover:bg-indigo-50/50">
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={(e) => setImageFile(e.target.files ? e.target.files[0] : null)}
-                          className="absolute inset-0 cursor-pointer opacity-0"
-                        />
-                        <div className="flex flex-col items-center gap-2 py-2">
-                          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 group-hover:bg-indigo-100">
-                            <svg className="h-5 w-5 text-slate-400 group-hover:text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                            </svg>
-                          </div>
-                          {imageFile ? (
-                            <span className="text-xs font-medium text-indigo-600">{imageFile.name}</span>
-                          ) : editingEvent.imageUrl ? (
-                            <span className="text-xs font-medium text-green-600">✓ Image uploaded</span>
-                          ) : (
-                            <span className="text-xs text-slate-500">Click to upload</span>
-                          )}
+                  <div className="group relative max-w-md">
+                    <label className="mb-2 block text-sm font-semibold text-slate-700">Upload Poster *</label>
+                    <div className="relative cursor-pointer overflow-hidden rounded-xl border-2 border-dashed border-slate-300 bg-white p-6 text-center transition hover:border-amber-400 hover:bg-amber-50/50">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => setPosterFile(e.target.files ? e.target.files[0] : null)}
+                        className="absolute inset-0 cursor-pointer opacity-0"
+                      />
+                      <div className="flex flex-col items-center gap-3 py-2">
+                        <div className="flex h-14 w-14 items-center justify-center rounded-full bg-slate-100 group-hover:bg-amber-100">
+                          <svg className="h-7 w-7 text-slate-400 group-hover:text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                          </svg>
                         </div>
-                      </div>
-                    </div>
-
-                    {/* Poster */}
-                    <div className="group relative">
-                      <label className="mb-2 block text-sm font-semibold text-slate-700">Poster</label>
-                      <div className="relative cursor-pointer overflow-hidden rounded-xl border-2 border-dashed border-slate-300 bg-white p-4 text-center transition hover:border-purple-400 hover:bg-purple-50/50">
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={(e) => setPosterFile(e.target.files ? e.target.files[0] : null)}
-                          className="absolute inset-0 cursor-pointer opacity-0"
-                        />
-                        <div className="flex flex-col items-center gap-2 py-2">
-                          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 group-hover:bg-purple-100">
-                            <svg className="h-5 w-5 text-slate-400 group-hover:text-purple-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                            </svg>
-                          </div>
-                          {posterFile ? (
-                            <span className="text-xs font-medium text-purple-600">{posterFile.name}</span>
-                          ) : editingEvent.posterUrl ? (
-                            <span className="text-xs font-medium text-green-600">✓ Poster uploaded</span>
-                          ) : (
-                            <span className="text-xs text-slate-500">Click to upload</span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Brochure */}
-                    <div className="group relative">
-                      <label className="mb-2 block text-sm font-semibold text-slate-700">Brochure</label>
-                      <div className="relative cursor-pointer overflow-hidden rounded-xl border-2 border-dashed border-slate-300 bg-white p-4 text-center transition hover:border-pink-400 hover:bg-pink-50/50">
-                        <input
-                          type="file"
-                          accept="image/*,application/pdf"
-                          onChange={(e) => setBrochureFile(e.target.files ? e.target.files[0] : null)}
-                          className="absolute inset-0 cursor-pointer opacity-0"
-                        />
-                        <div className="flex flex-col items-center gap-2 py-2">
-                          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 group-hover:bg-pink-100">
-                            <svg className="h-5 w-5 text-slate-400 group-hover:text-pink-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                            </svg>
-                          </div>
-                          {brochureFile ? (
-                            <span className="text-xs font-medium text-pink-600">{brochureFile.name}</span>
-                          ) : editingEvent.brochureUrl ? (
-                            <span className="text-xs font-medium text-green-600">✓ Brochure uploaded</span>
-                          ) : (
-                            <span className="text-xs text-slate-500">PDF or Image</span>
-                          )}
-                        </div>
+                        {posterFile ? (
+                          <span className="text-sm font-medium text-amber-600">{posterFile.name}</span>
+                        ) : editingEvent.posterUrl ? (
+                          <span className="text-sm font-medium text-green-600">✓ Poster uploaded</span>
+                        ) : (
+                          <>
+                            <span className="text-sm font-medium text-slate-600">Click to upload poster</span>
+                            <span className="text-xs text-slate-400">PNG, JPG up to 10MB</span>
+                          </>
+                        )}
                       </div>
                     </div>
                   </div>

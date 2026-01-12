@@ -101,11 +101,15 @@ export function ParticipantDashboard({ limit }: { limit?: number }) {
             className="group flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:shadow-md"
           >
             <div className="relative h-48 w-full overflow-hidden bg-slate-100">
-              <img
-                src={event.imageUrl}
-                alt={event.title}
-                className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
-              />
+              {event.posterUrl ? (
+                <img
+                  src={event.posterUrl}
+                  alt={event.title}
+                  className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
+                />
+              ) : (
+                <div className="h-full w-full bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500" />
+              )}
               <div className="absolute top-3 left-3 rounded-full bg-white/90 px-3 py-1 text-xs font-semibold backdrop-blur text-brand-dark">
                 {event.category}
               </div>
